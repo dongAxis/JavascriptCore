@@ -32,6 +32,7 @@ namespace JSC {
 
 class JSGlobalObject;
 class LLIntOffsetsExtractor;
+class LLIntDesiredOffsets;
 
 class JSGeneratorFunction final : public JSFunction {
     friend class JIT;

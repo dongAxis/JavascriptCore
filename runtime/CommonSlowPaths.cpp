@@ -33,6 +33,7 @@
 #include "CallFrame.h"
 #include "ClonedArguments.h"
 #include "CodeProfiling.h"
+#include "CommonSlowPathsExceptions.h"
 #include "DefinePropertyAttributes.h"
 #include "DirectArguments.h"
 #include "Error.h"
@@ -60,7 +61,6 @@
 #include "LowLevelInterpreter.h"
 #include "MathCommon.h"
 #include "ObjectConstructor.h"
-#include "OpcodeInlines.h"
 #include "ScopedArguments.h"
 #include "StructureRareDataInlines.h"
 #include "ThunkGenerators.h"
@@ -163,26 +163,16 @@ namespace JSC {
             CALL_END_IMPL(cceExec, LLInt::callToThrow(cceExec), ExceptionHandlerPtrTag); \
     } while (false)
 
-static void throwArityCheckStackOverflowError(ExecState* exec, ThrowScope& scope)
-{
-    JSObject* error = createStackOverflowError(exec);
-    throwException(exec, scope, error);
-#if LLINT_TRACING
-    if (UNLIKELY(Options::traceLLIntSlowPath()))
-        dataLog("Throwing exception ", JSValue(scope.exception()), ".\n");
-#endif
-}
-
 SLOW_PATH_DECL(slow_path_call_arityCheck)
 {
     BEGIN();
     int slotsToAdd = CommonSlowPaths::arityCheckFor(exec, vm, CodeForCall);
     if (slotsToAdd < 0) {
-        exec->convertToStackOverflowFrame(vm);
-        NativeCallFrameTracer tracer(&vm, exec);
+        exec = exec->callerFrame();
+        vm.topCallFrame = exec;
         ErrorHandlingScope errorScope(vm);
         throwScope.release();
-        throwArityCheckStackOverflowError(exec, throwScope);
+        CommonSlowPaths::interpreterThrowInCaller(exec, createStackOverflowError(exec));
         RETURN_TWO(bitwise_cast<void*>(static_cast<uintptr_t>(1)), exec);
     }
     RETURN_TWO(0, bitwise_cast<void*>(static_cast<uintptr_t>(slotsToAdd)));
@@ -193,10 +183,10 @@ SLOW_PATH_DECL(slow_path_construct_arityCheck)
     BEGIN();
     int slotsToAdd = CommonSlowPaths::arityCheckFor(exec, vm, CodeForConstruct);
     if (slotsToAdd < 0) {
-        exec->convertToStackOverflowFrame(vm);
-        NativeCallFrameTracer tracer(&vm, exec);
+        exec = exec->callerFrame();
+        vm.topCallFrame = exec;
         ErrorHandlingScope errorScope(vm);
-        throwArityCheckStackOverflowError(exec, throwScope);
+        CommonSlowPaths::interpreterThrowInCaller(exec, createStackOverflowError(exec));
         RETURN_TWO(bitwise_cast<void*>(static_cast<uintptr_t>(1)), exec);
     }
     RETURN_TWO(0, bitwise_cast<void*>(static_cast<uintptr_t>(slotsToAdd)));
@@ -704,7 +694,7 @@ SLOW_PATH_DECL(slow_path_is_function)
 SLOW_PATH_DECL(slow_path_in_by_val)
 {
     BEGIN();
-    RETURN(jsBoolean(CommonSlowPaths::opInByVal(exec, OP_C(2).jsValue(), OP_C(3).jsValue(), arrayProfileFor<OpInByValShape>(pc))));
+    RETURN(jsBoolean(CommonSlowPaths::opInByVal(exec, OP_C(2).jsValue(), OP_C(3).jsValue(), pc[4].u.arrayProfile)));
 }
 
 SLOW_PATH_DECL(slow_path_in_by_id)
@@ -783,7 +773,7 @@ SLOW_PATH_DECL(slow_path_has_indexed_property)
     JSObject* base = OP(2).jsValue().toObject(exec);
     CHECK_EXCEPTION();
     JSValue property = OP(3).jsValue();
-    arrayProfileFor<OpHasIndexedPropertyShape>(pc)->observeStructure(base->structure(vm));
+    pc[4].u.arrayProfile->observeStructure(base->structure(vm));
     ASSERT(property.isUInt32());
     RETURN(jsBoolean(base->hasPropertyGeneric(exec, property.asUInt32(), PropertySlot::InternalMethodType::GetOwnProperty)));
 }
@@ -810,7 +800,6 @@ SLOW_PATH_DECL(slow_path_has_generic_property)
     JSObject* base = OP(2).jsValue().toObject(exec);
     CHECK_EXCEPTION();
     JSValue property = OP(3).jsValue();
-    ASSERT(property.isString());
     JSString* string = asString(property);
     auto propertyName = string->toIdentifier(exec);
     CHECK_EXCEPTION();
@@ -822,7 +811,6 @@ SLOW_PATH_DECL(slow_path_get_direct_pname)
     BEGIN();
     JSValue baseValue = OP_C(2).jsValue();
     JSValue property = OP(3).jsValue();
-    ASSERT(property.isString());
     JSString* string = asString(property);
     auto propertyName = string->toIdentifier(exec);
     CHECK_EXCEPTION();

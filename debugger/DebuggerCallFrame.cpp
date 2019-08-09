@@ -118,8 +118,7 @@ JSC::JSGlobalObject* DebuggerCallFrame::vmEntryGlobalObject() const
     ASSERT(isValid());
     if (!isValid())
         return nullptr;
-    VM& vm = m_validMachineFrame->vm();
-    return vm.vmEntryGlobalObject(m_validMachineFrame);
+    return m_validMachineFrame->vmEntryGlobalObject();
 }
 
 SourceID DebuggerCallFrame::sourceID() const
@@ -253,7 +252,7 @@ JSValue DebuggerCallFrame::evaluateWithScopeExtension(const String& script, JSOb
         return jsUndefined();
     }
 
-    JSGlobalObject* globalObject = vm.vmEntryGlobalObject(callFrame);
+    JSGlobalObject* globalObject = callFrame->vmEntryGlobalObject();
     if (scopeExtensionObject) {
         JSScope* ignoredPreviousScope = globalObject->globalScope();
         globalObject->setGlobalScopeExtension(JSWithScope::create(vm, globalObject, ignoredPreviousScope, scopeExtensionObject));

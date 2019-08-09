@@ -921,9 +921,26 @@ OSRExit::OSRExit(ExitKind kind, JSValueSource jsValueSource, MethodOfGettingAVal
     DFG_ASSERT(jit->m_jit.graph(), jit->m_currentNode, canExit);
 }
 
-CodeLocationJump<JSInternalPtrTag> OSRExit::codeLocationForRepatch() const
+void OSRExit::setPatchableCodeOffset(MacroAssembler::PatchableJump check)
 {
-    return CodeLocationJump<JSInternalPtrTag>(m_patchableJumpLocation);
+    m_patchableCodeOffset = check.m_jump.m_label.m_offset;
+}
+
+MacroAssembler::Jump OSRExit::getPatchableCodeOffsetAsJump() const
+{
+    return MacroAssembler::Jump(AssemblerLabel(m_patchableCodeOffset));
+}
+
+CodeLocationJump<JSInternalPtrTag> OSRExit::codeLocationForRepatch(CodeBlock* dfgCodeBlock) const
+{
+    return CodeLocationJump<JSInternalPtrTag>(tagCodePtr<JSInternalPtrTag>(dfgCodeBlock->jitCode()->dataAddressAtOffset(m_patchableCodeOffset)));
+}
+
+void OSRExit::correctJump(LinkBuffer& linkBuffer)
+{
+    MacroAssembler::Label label;
+    label.m_label.m_offset = m_patchableCodeOffset;
+    m_patchableCodeOffset = linkBuffer.offsetOf(label);
 }
 
 void OSRExit::emitRestoreArguments(CCallHelpers& jit, const Operands<ValueRecovery>& operands)
@@ -1065,7 +1082,7 @@ void JIT_OPERATION OSRExit::compileOSRExit(ExecState* exec)
                 toCString(ignoringContext<DumpContext>(operands)).data());
     }
 
-    MacroAssembler::repatchJump(exit.codeLocationForRepatch(), CodeLocationLabel<OSRExitPtrTag>(exit.m_code.code()));
+    MacroAssembler::repatchJump(exit.codeLocationForRepatch(codeBlock), CodeLocationLabel<OSRExitPtrTag>(exit.m_code.code()));
 
     vm->osrExitJumpDestination = exit.m_code.code().executableAddress();
 }

@@ -64,6 +64,8 @@ namespace JSC {
     struct ProtoCallFrame;
     struct UnlinkedInstruction;
 
+    enum UnwindStart : uint8_t { UnwindFromCurrentFrame, UnwindFromCallerFrame };
+
     enum DebugHookType {
         WillExecuteProgram,
         DidExecuteProgram,
@@ -114,8 +116,8 @@ namespace JSC {
         JSValue execute(EvalExecutable*, CallFrame*, JSValue thisValue, JSScope*);
 
         void getArgumentsData(CallFrame*, JSFunction*&, ptrdiff_t& firstParameterIndex, Register*& argv, int& argc);
-
-        NEVER_INLINE HandlerInfo* unwind(VM&, CallFrame*&, Exception*);
+        
+        NEVER_INLINE HandlerInfo* unwind(VM&, CallFrame*&, Exception*, UnwindStart);
         void notifyDebuggerOfExceptionToBeThrown(VM&, CallFrame*, Exception*);
         NEVER_INLINE void debug(CallFrame*, DebugHookType);
         static String stackTraceAsString(VM&, const Vector<StackFrame>&);

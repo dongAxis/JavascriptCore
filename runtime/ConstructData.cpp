@@ -58,8 +58,7 @@ JSObject* construct(ExecState* exec, JSValue constructorObject, ConstructType co
 
 JSObject* profiledConstruct(ExecState* exec, ProfilingReason reason, JSValue constructorObject, ConstructType constructType, const ConstructData& constructData, const ArgList& args, JSValue newTarget)
 {
-    VM& vm = exec->vm();
-    ScriptProfilingScope profilingScope(vm.vmEntryGlobalObject(exec), reason);
+    ScriptProfilingScope profilingScope(exec->vmEntryGlobalObject(), reason);
     return construct(exec, constructorObject, constructType, constructData, args, newTarget);
 }
 

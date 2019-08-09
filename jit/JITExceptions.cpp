@@ -30,7 +30,6 @@
 #include "CatchScope.h"
 #include "CodeBlock.h"
 #include "Disassembler.h"
-#include "EntryFrame.h"
 #include "Interpreter.h"
 #include "JSCInlines.h"
 #include "JSCJSValue.h"
@@ -39,25 +38,32 @@
 #include "LLIntThunks.h"
 #include "Opcode.h"
 #include "ShadowChicken.h"
-#include "VMInlines.h"
+#include "VM.h"
 
 namespace JSC {
 
-void genericUnwind(VM* vm, ExecState* callFrame)
+void genericUnwind(VM* vm, ExecState* callFrame, UnwindStart unwindStart)
 {
     auto scope = DECLARE_CATCH_SCOPE(*vm);
-    CallFrame* topJSCallFrame = vm->topJSCallFrame();
     if (Options::breakOnThrow()) {
-        CodeBlock* codeBlock = topJSCallFrame->codeBlock();
-        dataLog("In call frame ", RawPointer(topJSCallFrame), " for code block ", codeBlock, "\n");
+        CodeBlock* codeBlock = callFrame->codeBlock();
+        if (codeBlock)
+            dataLog("In call frame ", RawPointer(callFrame), " for code block ", *codeBlock, "\n");
+        else
+            dataLog("In call frame ", RawPointer(callFrame), " with null CodeBlock\n");
         CRASH();
     }
     
-    vm->shadowChicken().log(*vm, topJSCallFrame, ShadowChicken::Packet::throwPacket());
-
+    ExecState* shadowChickenTopFrame = callFrame;
+    if (unwindStart == UnwindFromCallerFrame) {
+        EntryFrame* topEntryFrame = vm->topEntryFrame;
+        shadowChickenTopFrame = callFrame->callerFrame(topEntryFrame);
+    }
+    vm->shadowChicken().log(*vm, shadowChickenTopFrame, ShadowChicken::Packet::throwPacket());
+    
     Exception* exception = scope.exception();
     RELEASE_ASSERT(exception);
-    HandlerInfo* handler = vm->interpreter->unwind(*vm, callFrame, exception); // This may update callFrame.
+    HandlerInfo* handler = vm->interpreter->unwind(*vm, callFrame, exception, unwindStart); // This may update callFrame.
 
     void* catchRoutine;
     Instruction* catchPCForInterpreter = 0;
@@ -77,7 +83,7 @@ void genericUnwind(VM* vm, ExecState* callFrame)
 #endif
     } else
         catchRoutine = LLInt::getCodePtr<ExceptionHandlerPtrTag>(handleUncaughtException).executableAddress();
-
+    
     ASSERT(bitwise_cast<uintptr_t>(callFrame) < bitwise_cast<uintptr_t>(vm->topEntryFrame));
 
     assertIsTaggedWith(catchRoutine, ExceptionHandlerPtrTag);
@@ -86,6 +92,11 @@ void genericUnwind(VM* vm, ExecState* callFrame)
     vm->targetInterpreterPCForThrow = catchPCForInterpreter;
     
     RELEASE_ASSERT(catchRoutine);
+}
+
+void genericUnwind(VM* vm, ExecState* callFrame)
+{
+    genericUnwind(vm, callFrame, UnwindFromCurrentFrame);
 }
 
 } // namespace JSC

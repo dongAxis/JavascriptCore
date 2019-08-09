@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2018 Apple Inc. All rights reserved.
+ *  Copyright (C) 2008-2017 Apple Inc. All rights reserved.
  *  Copyright (C) 1999-2001 Harri Porten (porten@kde.org)
  *  Copyright (C) 2001 Peter Kelly (pmk@post.com)
  *
@@ -686,7 +686,6 @@ void Debugger::pauseIfNeeded(CallFrame* callFrame)
 {
     VM& vm = m_vm;
     auto scope = DECLARE_THROW_SCOPE(vm);
-    ASSERT(callFrame);
 
     if (m_isPaused)
         return;
@@ -719,7 +718,7 @@ void Debugger::pauseIfNeeded(CallFrame* callFrame)
     // reseting the pause state before executing any breakpoint actions.
     TemporaryPausedState pausedState(*this);
 
-    JSGlobalObject* vmEntryGlobalObject = vm.vmEntryGlobalObject(callFrame);
+    JSGlobalObject* vmEntryGlobalObject = callFrame->vmEntryGlobalObject(vm);
 
     if (didHitBreakpoint) {
         handleBreakpointHit(vmEntryGlobalObject, breakpoint);

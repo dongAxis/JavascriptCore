@@ -145,7 +145,8 @@ struct OSRExit : public OSRExitBase {
     static void JIT_OPERATION compileOSRExit(ExecState*) WTF_INTERNAL;
     static void executeOSRExit(Probe::Context&);
 
-    CodeLocationLabel<JSInternalPtrTag> m_patchableJumpLocation;
+    // FIXME: <rdar://problem/39498244>.
+    unsigned m_patchableCodeOffset { 0 };
     MacroAssemblerCodeRef<OSRExitPtrTag> m_code;
 
     RefPtr<OSRExitState> exitState;
@@ -155,7 +156,10 @@ struct OSRExit : public OSRExitBase {
     
     unsigned m_recoveryIndex;
 
-    CodeLocationJump<JSInternalPtrTag> codeLocationForRepatch() const;
+    void setPatchableCodeOffset(MacroAssembler::PatchableJump);
+    MacroAssembler::Jump getPatchableCodeOffsetAsJump() const;
+    CodeLocationJump<JSInternalPtrTag> codeLocationForRepatch(CodeBlock*) const;
+    void correctJump(LinkBuffer&);
 
     unsigned m_streamIndex;
     void considerAddingAsFrequentExitSite(CodeBlock* profiledCodeBlock)

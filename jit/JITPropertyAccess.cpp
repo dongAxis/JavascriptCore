@@ -38,7 +38,6 @@
 #include "JSFunction.h"
 #include "JSLexicalEnvironment.h"
 #include "LinkBuffer.h"
-#include "OpcodeInlines.h"
 #include "ResultType.h"
 #include "ScopedArguments.h"
 #include "ScopedArgumentsTable.h"
@@ -56,7 +55,7 @@ void JIT::emit_op_get_by_val(Instruction* currentInstruction)
     int dst = currentInstruction[1].u.operand;
     int base = currentInstruction[2].u.operand;
     int property = currentInstruction[3].u.operand;
-    ArrayProfile* profile = arrayProfileFor<OpGetByValShape>(currentInstruction);
+    ArrayProfile* profile = currentInstruction[4].u.arrayProfile;
     ByValInfo* byValInfo = m_codeBlock->addByValInfo();
 
     emitGetVirtualRegister(base, regT0);
@@ -196,7 +195,7 @@ void JIT::emit_op_put_by_val(Instruction* currentInstruction)
 {
     int base = currentInstruction[1].u.operand;
     int property = currentInstruction[2].u.operand;
-    ArrayProfile* profile = arrayProfileFor<OpPutByValShape>(currentInstruction);
+    ArrayProfile* profile = currentInstruction[4].u.arrayProfile;
     ByValInfo* byValInfo = m_codeBlock->addByValInfo();
 
     emitGetVirtualRegister(base, regT0);
@@ -253,8 +252,8 @@ void JIT::emit_op_put_by_val(Instruction* currentInstruction)
 JIT::JumpList JIT::emitGenericContiguousPutByVal(Instruction* currentInstruction, PatchableJump& badType, IndexingType indexingShape)
 {
     int value = currentInstruction[3].u.operand;
-    ArrayProfile* profile = arrayProfileFor<OpPutByValShape>(currentInstruction);
-
+    ArrayProfile* profile = currentInstruction[4].u.arrayProfile;
+    
     JumpList slowCases;
 
     badType = patchableBranch32(NotEqual, regT2, TrustedImm32(indexingShape));
@@ -309,8 +308,8 @@ JIT::JumpList JIT::emitGenericContiguousPutByVal(Instruction* currentInstruction
 JIT::JumpList JIT::emitArrayStoragePutByVal(Instruction* currentInstruction, PatchableJump& badType)
 {
     int value = currentInstruction[3].u.operand;
-    ArrayProfile* profile = arrayProfileFor<OpPutByValShape>(currentInstruction);
-
+    ArrayProfile* profile = currentInstruction[4].u.arrayProfile;
+    
     JumpList slowCases;
     
     badType = patchableBranch32(NotEqual, regT2, TrustedImm32(ArrayStorageShape));
@@ -1211,12 +1210,12 @@ void JIT::privateCompileGetByVal(ByValInfo* byValInfo, ReturnAddressPtr returnAd
     Jump done = jump();
 
     LinkBuffer patchBuffer(*this, m_codeBlock);
-
-    patchBuffer.link(badType, byValInfo->slowPathTarget);
-    patchBuffer.link(slowCases, byValInfo->slowPathTarget);
-
-    patchBuffer.link(done, byValInfo->badTypeDoneTarget);
-
+    
+    patchBuffer.link(badType, CodeLocationLabel<NoPtrTag>(MacroAssemblerCodePtr<NoPtrTag>::createFromExecutableAddress(returnAddress.value())).labelAtOffset(byValInfo->returnAddressToSlowPath));
+    patchBuffer.link(slowCases, CodeLocationLabel<NoPtrTag>(MacroAssemblerCodePtr<NoPtrTag>::createFromExecutableAddress(returnAddress.value())).labelAtOffset(byValInfo->returnAddressToSlowPath));
+    
+    patchBuffer.link(done, byValInfo->badTypeJump.labelAtOffset(byValInfo->badTypeJumpToDone));
+    
     byValInfo->stubRoutine = FINALIZE_CODE_FOR_STUB(
         m_codeBlock, patchBuffer, JITStubRoutinePtrTag,
         "Baseline get_by_val stub for %s, return point %p", toCString(*m_codeBlock).data(), returnAddress.value());
@@ -1237,9 +1236,9 @@ void JIT::privateCompileGetByValWithCachedId(ByValInfo* byValInfo, ReturnAddress
 
     ConcurrentJSLocker locker(m_codeBlock->m_lock);
     LinkBuffer patchBuffer(*this, m_codeBlock);
-    patchBuffer.link(slowCases, byValInfo->slowPathTarget);
-    patchBuffer.link(fastDoneCase, byValInfo->badTypeDoneTarget);
-    patchBuffer.link(slowDoneCase, byValInfo->badTypeNextHotPathTarget);
+    patchBuffer.link(slowCases, CodeLocationLabel<NoPtrTag>(MacroAssemblerCodePtr<NoPtrTag>::createFromExecutableAddress(returnAddress.value())).labelAtOffset(byValInfo->returnAddressToSlowPath));
+    patchBuffer.link(fastDoneCase, byValInfo->badTypeJump.labelAtOffset(byValInfo->badTypeJumpToDone));
+    patchBuffer.link(slowDoneCase, byValInfo->badTypeJump.labelAtOffset(byValInfo->badTypeJumpToNextHotPath));
     if (!m_exceptionChecks.empty())
         patchBuffer.link(m_exceptionChecks, byValInfo->exceptionHandler);
 
@@ -1294,9 +1293,9 @@ void JIT::privateCompilePutByVal(ByValInfo* byValInfo, ReturnAddressPtr returnAd
     Jump done = jump();
 
     LinkBuffer patchBuffer(*this, m_codeBlock);
-    patchBuffer.link(badType, byValInfo->slowPathTarget);
-    patchBuffer.link(slowCases, byValInfo->slowPathTarget);
-    patchBuffer.link(done, byValInfo->badTypeDoneTarget);
+    patchBuffer.link(badType, CodeLocationLabel<NoPtrTag>(MacroAssemblerCodePtr<NoPtrTag>::createFromExecutableAddress(returnAddress.value())).labelAtOffset(byValInfo->returnAddressToSlowPath));
+    patchBuffer.link(slowCases, CodeLocationLabel<NoPtrTag>(MacroAssemblerCodePtr<NoPtrTag>::createFromExecutableAddress(returnAddress.value())).labelAtOffset(byValInfo->returnAddressToSlowPath));
+    patchBuffer.link(done, byValInfo->badTypeJump.labelAtOffset(byValInfo->badTypeJumpToDone));
     if (needsLinkForWriteBarrier) {
         ASSERT(removeCodePtrTag(m_calls.last().callee.executableAddress()) == removeCodePtrTag(operationWriteBarrierSlowPath));
         patchBuffer.link(m_calls.last().from, m_calls.last().callee);
@@ -1328,8 +1327,8 @@ void JIT::privateCompilePutByValWithCachedId(ByValInfo* byValInfo, ReturnAddress
 
     ConcurrentJSLocker locker(m_codeBlock->m_lock);
     LinkBuffer patchBuffer(*this, m_codeBlock);
-    patchBuffer.link(slowCases, byValInfo->slowPathTarget);
-    patchBuffer.link(doneCases, byValInfo->badTypeDoneTarget);
+    patchBuffer.link(slowCases, CodeLocationLabel<NoPtrTag>(MacroAssemblerCodePtr<NoPtrTag>::createFromExecutableAddress(returnAddress.value())).labelAtOffset(byValInfo->returnAddressToSlowPath));
+    patchBuffer.link(doneCases, byValInfo->badTypeJump.labelAtOffset(byValInfo->badTypeJumpToDone));
     if (!m_exceptionChecks.empty())
         patchBuffer.link(m_exceptionChecks, byValInfo->exceptionHandler);
 
@@ -1628,7 +1627,7 @@ JIT::JumpList JIT::emitFloatTypedArrayGetByVal(Instruction*, PatchableJump& badT
 
 JIT::JumpList JIT::emitIntTypedArrayPutByVal(Instruction* currentInstruction, PatchableJump& badType, TypedArrayType type)
 {
-    ArrayProfile* profile = arrayProfileFor<OpPutByValShape>(currentInstruction);
+    ArrayProfile* profile = currentInstruction[4].u.arrayProfile;
     ASSERT(isInt(type));
     
     int value = currentInstruction[3].u.operand;
@@ -1701,7 +1700,7 @@ JIT::JumpList JIT::emitIntTypedArrayPutByVal(Instruction* currentInstruction, Pa
 
 JIT::JumpList JIT::emitFloatTypedArrayPutByVal(Instruction* currentInstruction, PatchableJump& badType, TypedArrayType type)
 {
-    ArrayProfile* profile = arrayProfileFor<OpPutByValShape>(currentInstruction);
+    ArrayProfile* profile = currentInstruction[4].u.arrayProfile;
     ASSERT(isFloat(type));
     
     int value = currentInstruction[3].u.operand;

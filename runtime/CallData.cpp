@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2018 Apple Inc. All Rights Reserved.
+ * Copyright (C) 2008, 2016 Apple Inc. All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -57,15 +57,13 @@ JSValue call(ExecState* exec, JSValue functionObject, CallType callType, const C
 
 JSValue profiledCall(ExecState* exec, ProfilingReason reason, JSValue functionObject, CallType callType, const CallData& callData, JSValue thisValue, const ArgList& args)
 {
-    VM& vm = exec->vm();
-    ScriptProfilingScope profilingScope(vm.vmEntryGlobalObject(exec), reason);
+    ScriptProfilingScope profilingScope(exec->vmEntryGlobalObject(), reason);
     return call(exec, functionObject, callType, callData, thisValue, args);
 }
 
 JSValue profiledCall(ExecState* exec, ProfilingReason reason, JSValue functionObject, CallType callType, const CallData& callData, JSValue thisValue, const ArgList& args, NakedPtr<Exception>& returnedException)
 {
-    VM& vm = exec->vm();
-    ScriptProfilingScope profilingScope(vm.vmEntryGlobalObject(exec), reason);
+    ScriptProfilingScope profilingScope(exec->vmEntryGlobalObject(), reason);
     return call(exec, functionObject, callType, callData, thisValue, args, returnedException);
 }
 

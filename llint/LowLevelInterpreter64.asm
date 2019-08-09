@@ -132,8 +132,6 @@ macro doVMEntry(makeCall)
     storep t4, VMEntryRecord::m_prevTopCallFrame[sp]
     loadp VM::topEntryFrame[vm], t4
     storep t4, VMEntryRecord::m_prevTopEntryFrame[sp]
-    loadp ProtoCallFrame::calleeValue[protoCallFrame], t4
-    storep t4, VMEntryRecord::m_callee[sp]
 
     loadi ProtoCallFrame::paddedArgCount[protoCallFrame], t4
     addp CallFrameHeaderSlots, t4, t4
@@ -246,6 +244,7 @@ macro doVMEntry(makeCall)
 
     popCalleeSaves()
     functionEpilogue()
+
     ret
 end
 
@@ -283,9 +282,10 @@ _handleUncaughtException:
     andp MarkedBlockMask, t3
     loadp MarkedBlockFooterOffset + MarkedBlock::Footer::m_vm[t3], t3
     restoreCalleeSavesFromVMEntryFrameCalleeSavesBuffer(t3, t0)
+    loadp VM::callFrameForCatch[t3], cfr
     storep 0, VM::callFrameForCatch[t3]
 
-    loadp VM::topEntryFrame[t3], cfr
+    loadp CallerFrame[cfr], cfr
     vmEntryRecord(cfr, t2)
 
     loadp VMEntryRecord::m_vm[t2], t3
@@ -508,12 +508,6 @@ macro functionArityCheck(doneLabel, slowPath)
     move PC, a1
     cCall2(slowPath)   # This slowPath has the protocol: r0 = 0 => no error, r0 != 0 => error
     btiz r0, .noError
-
-    # We're throwing before the frame is fully set up. This frame will be
-    # ignored by the unwinder. So, let's restore the callee saves before we
-    # start unwinding. We need to do this before we change the cfr.
-    restoreCalleeSavesUsedByLLInt()
-
     move r1, cfr   # r1 contains caller frame
     jmp _llint_throw_from_slow_path_trampoline
 

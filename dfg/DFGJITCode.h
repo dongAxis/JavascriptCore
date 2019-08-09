@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2018 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -54,11 +54,11 @@ public:
     CommonData* dfgCommon() override;
     JITCode* dfg() override;
     
-    OSREntryData* appendOSREntryData(unsigned bytecodeIndex, CodeLocationLabel<OSREntryPtrTag> machineCode)
+    OSREntryData* appendOSREntryData(unsigned bytecodeIndex, unsigned machineCodeOffset)
     {
         DFG::OSREntryData entry;
         entry.m_bytecodeIndex = bytecodeIndex;
-        entry.m_machineCode = machineCode;
+        entry.m_machineCodeOffset = machineCodeOffset;
         osrEntry.append(entry);
         return &osrEntry.last();
     }

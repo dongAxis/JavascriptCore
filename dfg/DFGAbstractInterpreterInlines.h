@@ -3154,16 +3154,11 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
             }
         }
         
-        // We need to order AI executing these effects in the same order as they're executed
-        // at runtime. This is critical when you have JS code like `o.f = o;`. We first
-        // filter types on o, then transition o. Not the other way around. If we got
-        // this ordering wrong, we could end up with the wrong type representing o.
-        setForNode(node->child2(), resultingValue);
-        if (!!originalValue && !resultingValue)
-            m_state.setIsValid(false);
-
         observeTransitions(clobberLimit, transitions);
         if (forNode(node->child1()).changeStructure(m_graph, newSet) == Contradiction)
+            m_state.setIsValid(false);
+        setForNode(node->child2(), resultingValue);
+        if (!!originalValue && !resultingValue)
             m_state.setIsValid(false);
         break;
     }

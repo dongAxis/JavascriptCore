@@ -29,6 +29,7 @@
 #include "ArrayConstructor.h"
 #include "CallFrame.h"
 #include "CommonSlowPaths.h"
+#include "CommonSlowPathsExceptions.h"
 #include "Error.h"
 #include "ErrorHandlingScope.h"
 #include "EvalCodeBlock.h"
@@ -60,7 +61,6 @@
 #include "ModuleProgramCodeBlock.h"
 #include "ObjectConstructor.h"
 #include "ObjectPropertyConditionSet.h"
-#include "OpcodeInlines.h"
 #include "ProgramCodeBlock.h"
 #include "ProtoCallFrame.h"
 #include "RegExpObject.h"
@@ -525,10 +525,13 @@ LLINT_SLOW_PATH_DECL(stack_check)
     VM& vm = exec->vm();
     auto throwScope = DECLARE_THROW_SCOPE(vm);
 
-    // It's ok to create the NativeCallFrameTracer here before we
-    // convertToStackOverflowFrame() because this function is always called
-    // after the frame has been propulated with a proper CodeBlock and callee.
-    NativeCallFrameTracer tracer(&vm, exec);
+    EntryFrame* topEntryFrame = vm.topEntryFrame;
+    CallFrame* callerFrame = exec->callerFrame(topEntryFrame);
+    if (!callerFrame) {
+        callerFrame = exec;
+        topEntryFrame = vm.topEntryFrame;
+    }
+    NativeCallFrameTracerWithRestore tracer(&vm, topEntryFrame, callerFrame);
 
     LLINT_SET_PC_FOR_STUBS();
 
@@ -560,10 +563,9 @@ LLINT_SLOW_PATH_DECL(stack_check)
     }
 #endif
 
-    exec->convertToStackOverflowFrame(vm);
     ErrorHandlingScope errorScope(vm);
-    throwStackOverflowError(exec, throwScope);
-    pc = returnToThrow(exec);
+    throwStackOverflowError(callerFrame, throwScope);
+    pc = returnToThrow(callerFrame);
     LLINT_RETURN_TWO(pc, exec);
 }
 
@@ -806,7 +808,6 @@ LLINT_SLOW_PATH_DECL(slow_path_get_by_id)
         ArrayProfile* arrayProfile = codeBlock->getOrAddArrayProfile(codeBlock->bytecodeOffset(pc));
         arrayProfile->observeStructure(baseValue.asCell()->structure(vm));
         pc[4].u.arrayProfile = arrayProfile;
-        ASSERT(arrayProfileFor<OpGetArrayLengthShape>(pc) == arrayProfile);
 
         // Prevent the prototype cache from ever happening.
         pc[7].u.operand = 0;
@@ -943,7 +944,7 @@ static ALWAYS_INLINE JSValue getByVal(VM& vm, ExecState* exec, Instruction* pc, 
     
     if (subscript.isUInt32()) {
         uint32_t i = subscript.asUInt32();
-        ArrayProfile* arrayProfile = arrayProfileFor<OpGetByValShape>(pc);
+        ArrayProfile* arrayProfile = pc[4].u.arrayProfile;
 
         if (isJSString(baseValue)) {
             if (asString(baseValue)->canGetIndex(i)) {

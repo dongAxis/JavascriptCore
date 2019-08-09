@@ -102,8 +102,10 @@ void JITCompiler::linkOSRExits()
             addLinkTask([target, osrExitThunkLabel] (LinkBuffer& linkBuffer) {
                 linkBuffer.link(target, osrExitThunkLabel);
             });
-        } else
-            info.m_patchableJump = patchableJump();
+        } else {
+            OSRExit& exit = m_jitCode->osrExit[i];
+            exit.setPatchableCodeOffset(patchableJump());
+        }
     }
 }
 
@@ -298,9 +300,9 @@ void JITCompiler::link(LinkBuffer& linkBuffer)
     for (unsigned i = 0; i < m_jitCode->osrExit.size(); ++i) {
         OSRExitCompilationInfo& info = m_exitCompilationInfo[i];
         if (!Options::useProbeOSRExit()) {
-            linkBuffer.link(info.m_patchableJump.m_jump, target);
             OSRExit& exit = m_jitCode->osrExit[i];
-            exit.m_patchableJumpLocation = linkBuffer.locationOf<JSInternalPtrTag>(info.m_patchableJump);
+            linkBuffer.link(exit.getPatchableCodeOffsetAsJump(), target);
+            exit.correctJump(linkBuffer);
         }
         if (info.m_replacementSource.isSet()) {
             m_jitCode->common.jumpReplacements.append(JumpReplacement(
@@ -574,7 +576,7 @@ void JITCompiler::noticeOSREntry(BasicBlock& basicBlock, JITCompiler::Label bloc
     if (!basicBlock.intersectionOfCFAHasVisited)
         return;
 
-    OSREntryData* entry = m_jitCode->appendOSREntryData(basicBlock.bytecodeBegin, linkBuffer.locationOf<OSREntryPtrTag>(blockHead));
+    OSREntryData* entry = m_jitCode->appendOSREntryData(basicBlock.bytecodeBegin, linkBuffer.offsetOf(blockHead));
 
     entry->m_expectedValues = basicBlock.intersectionOfPastValuesAtHead;
         

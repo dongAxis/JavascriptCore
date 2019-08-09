@@ -28,7 +28,6 @@
 #if ENABLE(JIT)
 
 #include "CodeBlock.h"
-#include "EntryFrame.h"
 #include "FPRInfo.h"
 #include "GPRInfo.h"
 #include "Heap.h"

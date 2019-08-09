@@ -143,7 +143,6 @@
 #include "TypeProfilerLog.h"
 #include "UnlinkedCodeBlock.h"
 #include "VMEntryScope.h"
-#include "VMInlines.h"
 #include "VMInspector.h"
 #include "VariableEnvironment.h"
 #include "WasmWorklist.h"
@@ -809,16 +808,15 @@ void VM::clearSourceProviderCaches()
 
 void VM::throwException(ExecState* exec, Exception* exception)
 {
-    ASSERT(exec == topCallFrame || exec->isGlobalExec());
-    CallFrame* throwOriginFrame = exec->isGlobalExec() ? exec : topJSCallFrame();
-
     if (Options::breakOnThrow()) {
-        CodeBlock* codeBlock = throwOriginFrame ? throwOriginFrame->codeBlock() : nullptr;
-        dataLog("Throwing exception in call frame ", RawPointer(throwOriginFrame), " for code block ", codeBlock, "\n");
+        CodeBlock* codeBlock = exec->codeBlock();
+        dataLog("Throwing exception in call frame ", RawPointer(exec), " for code block ", codeBlock, "\n");
         CRASH();
     }
 
-    interpreter->notifyDebuggerOfExceptionToBeThrown(*this, throwOriginFrame, exception);
+    ASSERT(exec == topCallFrame || exec == exec->lexicalGlobalObject()->globalExec() || exec == exec->vmEntryGlobalObject()->globalExec());
+
+    interpreter->notifyDebuggerOfExceptionToBeThrown(*this, exec, exception);
 
     setException(exception);
 
@@ -1243,17 +1241,6 @@ void VM::clearScratchBuffers()
     auto lock = holdLock(m_scratchBufferLock);
     for (auto* scratchBuffer : m_scratchBuffers)
         scratchBuffer->setActiveLength(0);
-}
-
-JSGlobalObject* VM::vmEntryGlobalObject(const CallFrame* callFrame) const
-{
-    if (callFrame && callFrame->isGlobalExec()) {
-        ASSERT(callFrame->callee().isCell() && callFrame->callee().asCell()->isObject());
-        ASSERT(callFrame == callFrame->lexicalGlobalObject()->globalExec());
-        return callFrame->lexicalGlobalObject();
-    }
-    ASSERT(entryScope);
-    return entryScope->globalObject();
 }
 
 } // namespace JSC

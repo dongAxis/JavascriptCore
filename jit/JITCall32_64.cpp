@@ -36,7 +36,6 @@
 #include "JSFunction.h"
 #include "JSCInlines.h"
 #include "LinkBuffer.h"
-#include "OpcodeInlines.h"
 #include "ResultType.h"
 #include "SetupVarargsFrame.h"
 #include "StackAlignment.h"
@@ -252,7 +251,7 @@ void JIT::compileOpCall(OpcodeID opcodeID, Instruction* instruction, unsigned ca
             emitLoad(registerOffset + CallFrame::argumentOffsetIncludingThis(0), regT0, regT1);
             Jump done = branchIfNotCell(regT0);
             loadPtr(Address(regT1, JSCell::structureIDOffset()), regT1);
-            storePtr(regT1, arrayProfileFor<OpCallShape>(instruction)->addressOfLastSeenStructureID());
+            storePtr(regT1, instruction[OPCODE_LENGTH(op_call) - 2].u.arrayProfile->addressOfLastSeenStructureID());
             done.link(this);
         }
     

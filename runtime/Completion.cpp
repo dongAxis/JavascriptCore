@@ -1,7 +1,7 @@
 /*
  *  Copyright (C) 1999-2001 Harri Porten (porten@kde.org)
  *  Copyright (C) 2001 Peter Kelly (pmk@post.com)
- *  Copyright (C) 2003-2018 Apple Inc.
+ *  Copyright (C) 2003-2017 Apple Inc.
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Library General Public
@@ -98,7 +98,7 @@ JSValue evaluate(ExecState* exec, const SourceCode& source, JSValue thisValue, N
     CodeProfiling profile(source);
 
     if (!thisValue || thisValue.isUndefinedOrNull())
-        thisValue = vm.vmEntryGlobalObject(exec);
+        thisValue = exec->vmEntryGlobalObject();
     JSObject* thisObj = jsCast<JSObject*>(thisValue.toThis(exec, NotStrictMode));
     JSValue result = vm.interpreter->executeProgram(source, exec, thisObj);
 
@@ -114,19 +114,17 @@ JSValue evaluate(ExecState* exec, const SourceCode& source, JSValue thisValue, N
 
 JSValue profiledEvaluate(ExecState* exec, ProfilingReason reason, const SourceCode& source, JSValue thisValue, NakedPtr<Exception>& returnedException)
 {
-    VM& vm = exec->vm();
-    ScriptProfilingScope profilingScope(vm.vmEntryGlobalObject(exec), reason);
+    ScriptProfilingScope profilingScope(exec->vmEntryGlobalObject(), reason);
     return evaluate(exec, source, thisValue, returnedException);
 }
 
 JSValue evaluateWithScopeExtension(ExecState* exec, const SourceCode& source, JSObject* scopeExtensionObject, NakedPtr<Exception>& returnedException)
 {
-    VM& vm = exec->vm();
-    JSGlobalObject* globalObject = vm.vmEntryGlobalObject(exec);
+    JSGlobalObject* globalObject = exec->vmEntryGlobalObject();
 
     if (scopeExtensionObject) {
         JSScope* ignoredPreviousScope = globalObject->globalScope();
-        globalObject->setGlobalScopeExtension(JSWithScope::create(vm, globalObject, ignoredPreviousScope, scopeExtensionObject));
+        globalObject->setGlobalScopeExtension(JSWithScope::create(exec->vm(), globalObject, ignoredPreviousScope, scopeExtensionObject));
     }
 
     JSValue returnValue = JSC::evaluate(globalObject->globalExec(), source, globalObject, returnedException);
@@ -163,7 +161,7 @@ JSInternalPromise* loadAndEvaluateModule(ExecState* exec, const String& moduleNa
     RELEASE_ASSERT(vm.atomicStringTable() == Thread::current().atomicStringTable());
     RELEASE_ASSERT(!vm.isCollectorBusyOnCurrentThread());
 
-    return vm.vmEntryGlobalObject(exec)->moduleLoader()->loadAndEvaluateModule(exec, identifierToJSValue(vm, Identifier::fromString(exec, moduleName)), parameters, scriptFetcher);
+    return exec->vmEntryGlobalObject()->moduleLoader()->loadAndEvaluateModule(exec, identifierToJSValue(vm, Identifier::fromString(exec, moduleName)), parameters, scriptFetcher);
 }
 
 JSInternalPromise* loadAndEvaluateModule(ExecState* exec, const SourceCode& source, JSValue scriptFetcher)
@@ -176,7 +174,7 @@ JSInternalPromise* loadAndEvaluateModule(ExecState* exec, const SourceCode& sour
 
     Symbol* key = createSymbolForEntryPointModule(vm);
 
-    JSGlobalObject* globalObject = vm.vmEntryGlobalObject(exec);
+    JSGlobalObject* globalObject = exec->vmEntryGlobalObject();
 
     // Insert the given source code to the ModuleLoader registry as the fetched registry entry.
     globalObject->moduleLoader()->provideFetch(exec, key, source);
@@ -192,7 +190,7 @@ JSInternalPromise* loadModule(ExecState* exec, const String& moduleName, JSValue
     RELEASE_ASSERT(vm.atomicStringTable() == Thread::current().atomicStringTable());
     RELEASE_ASSERT(!vm.isCollectorBusyOnCurrentThread());
 
-    return vm.vmEntryGlobalObject(exec)->moduleLoader()->loadModule(exec, identifierToJSValue(vm, Identifier::fromString(exec, moduleName)), parameters, scriptFetcher);
+    return exec->vmEntryGlobalObject()->moduleLoader()->loadModule(exec, identifierToJSValue(vm, Identifier::fromString(exec, moduleName)), parameters, scriptFetcher);
 }
 
 JSInternalPromise* loadModule(ExecState* exec, const SourceCode& source, JSValue scriptFetcher)
@@ -205,7 +203,7 @@ JSInternalPromise* loadModule(ExecState* exec, const SourceCode& source, JSValue
 
     Symbol* key = createSymbolForEntryPointModule(vm);
 
-    JSGlobalObject* globalObject = vm.vmEntryGlobalObject(exec);
+    JSGlobalObject* globalObject = exec->vmEntryGlobalObject();
 
     // Insert the given source code to the ModuleLoader registry as the fetched registry entry.
     // FIXME: Introduce JSSourceCode object to wrap around this source.
@@ -222,7 +220,7 @@ JSValue linkAndEvaluateModule(ExecState* exec, const Identifier& moduleKey, JSVa
     RELEASE_ASSERT(vm.atomicStringTable() == Thread::current().atomicStringTable());
     RELEASE_ASSERT(!vm.isCollectorBusyOnCurrentThread());
 
-    JSGlobalObject* globalObject = vm.vmEntryGlobalObject(exec);
+    JSGlobalObject* globalObject = exec->vmEntryGlobalObject();
     return globalObject->moduleLoader()->linkAndEvaluateModule(exec, identifierToJSValue(vm, moduleKey), scriptFetcher);
 }
 
@@ -233,7 +231,7 @@ JSInternalPromise* importModule(ExecState* exec, const Identifier& moduleKey, JS
     RELEASE_ASSERT(vm.atomicStringTable() == Thread::current().atomicStringTable());
     RELEASE_ASSERT(!vm.isCollectorBusyOnCurrentThread());
 
-    return vm.vmEntryGlobalObject(exec)->moduleLoader()->requestImportModule(exec, moduleKey, parameters, scriptFetcher);
+    return exec->vmEntryGlobalObject()->moduleLoader()->requestImportModule(exec, moduleKey, parameters, scriptFetcher);
 }
 
 } // namespace JSC
